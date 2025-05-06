@@ -1,0 +1,108 @@
+---
+- name: Install prerequisites
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - software-properties-common
+      - python3-pip
+    state: present
+    update_cache: yes
+  when: ansible_os_family == 'Debian'
+  become: yes
+
+- name: Add Docker GPG key
+  apt_key:
+    url: https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg
+    state: present
+  when: ansible_os_family == 'Debian'
+  become: yes
+
+- name: Add Docker repository
+  apt_repository:
+    repo: deb https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable
+    state: present
+  when: ansible_os_family == 'Debian'
+  become: yes
+
+- name: Install Docker packages
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+    update_cache: yes
+  when: ansible_os_family == 'Debian'
+  become: yes
+
+- name: Install Docker (RedHat)
+  yum:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+    state: present
+  when: ansible_os_family == 'RedHat'
+  become: yes
+
+- name: Ensure docker group exists
+  group:
+    name: docker
+    state: present
+  become: yes
+
+- name: Add user to docker group
+  user:
+    name: "{{ ansible_user_id }}"
+    groups: docker
+    append: yes
+  become: yes
+
+- name: Start and enable Docker service
+  systemd:
+    name: docker
+    state: started
+    enabled: yes
+  become: yes
+
+- name: Verify Docker socket permissions
+  file:
+    path: /var/run/docker.sock
+    mode: '0660'
+    owner: root
+    group: docker
+    state: touch
+  become: yes
+
+- name: Check if user in docker group
+  command: id -nG
+  register: user_groups
+  changed_when: false
+
+- name: Reload user groups (if docker group not active)
+  command: sg docker -c "echo Groups updated"
+  when: "'docker' not in user_groups.stdout"
+  ignore_errors: yes
+
+- name: Verify Docker installation
+  command: docker --version
+  register: docker_version
+  changed_when: false
+
+- name: Show Docker version
+  debug:
+    var: docker_version.stdout
+
+- name: Test Docker connectivity
+  command: docker ps
+  register: docker_test
+  changed_when: false
+  ignore_errors: yes
+
+- name: Show Docker connectivity test result
+  debug:
+    var: docker_test.stdout

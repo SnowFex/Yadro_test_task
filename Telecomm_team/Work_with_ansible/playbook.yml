@@ -1,0 +1,11 @@
+---
+- name: Install Docker and test script in container
+  hosts: all
+  become: yes
+  gather_facts: yes
+
+  roles:
+    - role: docker_install
+      tags: docker
+    - role: script_test
+      tags: test

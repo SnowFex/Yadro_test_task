@@ -1,0 +1,56 @@
+---
+- name: Copy test script to host
+  copy:
+    src: script.py
+    dest: /tmp/script.py
+    mode: '0755'
+
+- name: Create Dockerfile
+  template:
+    src: Dockerfile
+    dest: /tmp/Dockerfile
+
+- name: Ensure Docker socket permissions
+  file:
+    path: /var/run/docker.sock
+    state: file
+    mode: '0660'
+    group: docker
+  become: yes
+
+- name: Build Docker image
+  command: docker build -t script-test -f /tmp/Dockerfile /tmp
+  register: build_result
+  changed_when: "'Successfully built' in build_result.stdout"
+  become: yes
+
+- name: Clean up old container if exists
+  command: docker rm -f script-test-container
+  ignore_errors: yes
+  changed_when: false
+  become: yes
+
+- name: Run container and capture raw output
+  command: >
+    docker run
+    --name script-test-container
+    --rm
+    script-test
+  register: container_run
+  changed_when: false
+  become: yes
+  ignore_errors: yes
+
+- name: Display raw container output exactly as produced
+  debug:
+    msg: "{{ container_run.stderr_lines + container_run.stdout_lines }}"
+  when: container_run.stderr_lines | length > 0 or container_run.stdout_lines | length > 0
+
+- name: Verify script execution
+  assert:
+    that:
+      - container_run.rc == 0
+    fail_msg: |
+      Script completed with exit code {{ container_run.rc }}
+      Full output was displayed above
+    success_msg: "Script executed successfully (output was displayed above)"
